@@ -353,20 +353,24 @@ int ftpServer_cwd(int sock_control, char *folderName)
  * over data connection
  * Return -1 on error, 0 on success
  */
-void ftpServer_pwd(int sock_control, int sock_data)
-{
-	char curr_dir[MAX_SIZE - 2], msgToClient[MAX_SIZE];
-	memset(curr_dir, 0, MAX_SIZE);
-	memset(msgToClient, 0, MAX_SIZE);
 
-	getcwd(curr_dir, sizeof(curr_dir));
-	sprintf(msgToClient, "%s\n", curr_dir);
-	if (send(sock_data, msgToClient, strlen(msgToClient), 0) < 0)
-	{
-		perror("error");
-		send_response(sock_control, 550);
-	}
-	send_response(sock_control, 212);
+void ftpServer_pwd(int sock_control, int sock_data) {
+    char curr_dir[MAX_SIZE];  // Sửa kích thước mảng để chứa tên thư mục đầy đủ
+    memset(curr_dir, 0, sizeof(curr_dir));
+
+    if (getcwd(curr_dir, sizeof(curr_dir)) == NULL) {  // Kiểm tra lỗi getcwd()
+        perror("error");
+        send_response(sock_control, 550);
+    } else {
+        // Gửi thông tin thư mục hiện tại đến client
+		strcat(curr_dir, "\n");
+        if (send(sock_data, curr_dir, strlen(curr_dir), 0) < 0) {
+            perror("error");
+            send_response(sock_control, 550);
+        } else {
+            send_response(sock_control, 212);
+        }
+    }
 }
 
 /**
@@ -471,6 +475,13 @@ void ftserve_process(int sock_control)
 		exit(0);
 	}
 
+	// Lấy thông tin địa chỉ IP của client
+    struct sockaddr_in client_addr;
+    socklen_t len = sizeof(client_addr);
+    getpeername(sock_control, (struct sockaddr *)&client_addr, &len);
+    char client_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
+
 	while (1)
 	{
 		// Wait for command
@@ -515,5 +526,12 @@ void ftserve_process(int sock_control)
 			// Close data connection
 			close(sock_data);
 		}
+
+		// In lệnh và địa chỉ IP
+            time_t now = time(NULL);
+            struct tm *local_time = localtime(&now);
+            char time_str[20];
+            strftime(time_str, sizeof(time_str), "%H:%M:%S", local_time);
+            printf("%s %-6s %s\n", time_str, cmd, client_ip);
 	}
 }
